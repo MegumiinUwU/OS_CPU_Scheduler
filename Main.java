@@ -33,6 +33,7 @@ import java.util.List;
     boolean isCompleted;
     int startTime ;
     int completionTime;
+    int age;
     private List<Integer> quantumHistory = new ArrayList<>();
 
 
@@ -48,6 +49,7 @@ import java.util.List;
         this.quantum = quantum;
         this.fcaiFactor = 0.0;
         this.startTime = -1;
+        this.age = 0;
     }
     public void updateQuantum(int increment) {
         this.quantum += increment;
@@ -77,6 +79,14 @@ import java.util.List;
 
     public void reduceRemainingBurstTime(int time) {
         this.remainingBurstTime -= time;
+    }
+
+    public int getAge() {
+        return this.age;
+    }
+
+    public void incrementAge() {
+        this.age = this.age + 1;
     }
 
 
@@ -183,54 +193,74 @@ class CPUScheduler {
 
     // Shortest Remaining Time First (SRTF)
     public static void srtfScheduling(List<Process> processes) {
-        List<String> timeline = new ArrayList<>();
+        // List<String> timeline = new ArrayList<>();
+        // int currentTime = 0;
+        // int completedProcesses = 0;
+        // int contextSwitchOverhead = 1;
+        // Process lastExecutedProcess = null;
+
+        // while (completedProcesses < processes.size()) {
+        //     Process shortestProcess = null;
+        //     int shortestRemainingTime = Integer.MAX_VALUE;
+
+        //     // Find the process with the shortest remaining burst time among the ready processes
+        //     for (Process p : processes) {
+        //         if (p.arrivalTime <= currentTime && p.remainingBurstTime > 0) {
+        //             if (p.remainingBurstTime < shortestRemainingTime ||
+        //                     (p.remainingBurstTime == shortestRemainingTime && p.arrivalTime < (shortestProcess != null ? shortestProcess.arrivalTime : Integer.MAX_VALUE))) {
+        //                 shortestProcess = p;
+        //                 shortestRemainingTime = p.remainingBurstTime;
+        //             }
+        //         }
+        //     }
+
+        //     if (shortestProcess != null) {
+        //         // Handle context switch if a new process is selected
+        //         if (lastExecutedProcess != shortestProcess) {
+        //             currentTime += contextSwitchOverhead;
+        //             lastExecutedProcess = shortestProcess;
+        //         }
+
+        //         // Execute the selected process for 1 time unit
+        //         shortestProcess.remainingBurstTime--;
+        //         timeline.add("P" + shortestProcess.name + ":" + currentTime); // Track process execution
+        //         currentTime++;
+
+        //         // If the process completes execution
+        //         if (shortestProcess.remainingBurstTime == 0) {
+        //             completedProcesses++;
+        //             shortestProcess.turnaroundTime = currentTime - shortestProcess.arrivalTime;
+        //             shortestProcess.waitingTime = shortestProcess.turnaroundTime - shortestProcess.burstTime;
+        //             shortestProcess.isCompleted = true;
+        //         }
+        //     } else {
+        //         // No process is ready; advance time
+        //         currentTime++;
+        //     }
+        // }
+
+        // printSchedulerResults("Shortest Remaining Time First (SRTF)", processes);
+        // drawGanttChart(timeline);
+
+        PriorityQueue remainingProcesses = new PriorityQueue<>((p1, p2) -> Integer.compare(p1.getBurstTime() - p1.getAge(), p2.getBurstTime() - p2.getAge()));
+        PriorityQueue tmp = new PriorityQueue<>((p1, p2) -> Integer.compare(p1.getBurstTime() - p1.getAge(), p2.getBurstTime() - p2.getAge()));
+        Process currentProcess = new Process(null, null, 0, 0, 0, 0);
+
         int currentTime = 0;
-        int completedProcesses = 0;
-        int contextSwitchOverhead = 1;
-        Process lastExecutedProcess = null;
-
-        while (completedProcesses < processes.size()) {
-            Process shortestProcess = null;
-            int shortestRemainingTime = Integer.MAX_VALUE;
-
-            // Find the process with the shortest remaining burst time among the ready processes
-            for (Process p : processes) {
-                if (p.arrivalTime <= currentTime && p.remainingBurstTime > 0) {
-                    if (p.remainingBurstTime < shortestRemainingTime ||
-                            (p.remainingBurstTime == shortestRemainingTime && p.arrivalTime < (shortestProcess != null ? shortestProcess.arrivalTime : Integer.MAX_VALUE))) {
-                        shortestProcess = p;
-                        shortestRemainingTime = p.remainingBurstTime;
-                    }
-                }
+        int i = 0;
+        while(i <= processes.size() || !remainingProcesses.isEmpty() || currentProcess.getName() != null) {
+            while(!remainingProcesses.isEmpty()) {
+                Process newProcess = remainingProcesses.poll();
+                newProcess.incrementAge();
+                tmp.add(newProcess);
             }
-
-            if (shortestProcess != null) {
-                // Handle context switch if a new process is selected
-                if (lastExecutedProcess != shortestProcess) {
-                    currentTime += contextSwitchOverhead;
-                    lastExecutedProcess = shortestProcess;
-                }
-
-                // Execute the selected process for 1 time unit
-                shortestProcess.remainingBurstTime--;
-                timeline.add("P" + shortestProcess.name + ":" + currentTime); // Track process execution
-                currentTime++;
-
-                // If the process completes execution
-                if (shortestProcess.remainingBurstTime == 0) {
-                    completedProcesses++;
-                    shortestProcess.turnaroundTime = currentTime - shortestProcess.arrivalTime;
-                    shortestProcess.waitingTime = shortestProcess.turnaroundTime - shortestProcess.burstTime;
-                    shortestProcess.isCompleted = true;
-                }
-            } else {
-                // No process is ready; advance time
-                currentTime++;
+            remainingProcesses = new PriorityQueue<>(tmp);
+            tmp = new PriorityQueue<>((p1, p2) -> Integer.compare(p1.getBurstTime() - p1.getAge(), p2.getBurstTime() - p2.getAge()));
+            while(processes.get(i).getArrivalTime() <= currentTime) {
+                remainingProcesses.add(processes.get(i));
+                i++;
             }
         }
-
-        printSchedulerResults("Shortest Remaining Time First (SRTF)", processes);
-        drawGanttChart(timeline);
     }
 
     public static void drawGanttChart(List<String> timeline) {
