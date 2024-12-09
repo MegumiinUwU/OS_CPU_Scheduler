@@ -33,7 +33,6 @@ import java.util.List;
     boolean isCompleted;
     int startTime ;
     int completionTime;
-    int age;
     private List<Integer> quantumHistory = new ArrayList<>();
 
 
@@ -49,7 +48,6 @@ import java.util.List;
         this.quantum = quantum;
         this.fcaiFactor = 0.0;
         this.startTime = -1;
-        this.age = 0;
     }
     public void updateQuantum(int increment) {
         this.quantum += increment;
@@ -81,14 +79,6 @@ import java.util.List;
         this.remainingBurstTime -= time;
     }
 
-    public int getAge() {
-        return this.age;
-    }
-
-    public void incrementAge() {
-        this.age = this.age + 1;
-    }
-
 
 
 
@@ -104,6 +94,7 @@ class CPUScheduler {
         int completed = 0;
         int n = processes.size();
         int contextSwitchOverhead = 1;
+        List<String> timeline = new ArrayList<>();
 
         while (completed < n) {
             // Select the highest priority process among arrived processes
@@ -127,13 +118,188 @@ class CPUScheduler {
                 }
 
                 // Execute the selected process
+                timeline.add("Time " + currentTime + ": Process " + highestPriorityProcess.name + " is running");
                 highestPriorityProcess.waitingTime = currentTime - highestPriorityProcess.arrivalTime;
                 highestPriorityProcess.turnaroundTime = highestPriorityProcess.waitingTime + highestPriorityProcess.burstTime;
                 currentTime += highestPriorityProcess.burstTime;
                 highestPriorityProcess.isCompleted = true;
                 completed++;
+                timeline.add("Time " + currentTime + ": Process " + highestPriorityProcess.name + " is completed");
             }
         }
+        class TimelinePanel extends JPanel {
+            private final List<String> processLog;
+
+
+            public TimelinePanel(List<String> processLog) {
+                this.processLog = processLog;
+
+            }
+
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+
+                int barHeight = 20; // Height of each process bar
+                int spacing = 30;   // Spacing between bars
+                int startX = 50;    // Start x-coordinate for drawing bars
+                int currentY = 20;  // Start y-coordinate for the first process
+
+                Map<String, Integer> processColors = new HashMap<>();
+                int colorIndex = 0;
+                int maxTime = 0;
+
+                String previousProcess = null;
+                int previousTime = 0;
+                // Map to track start and end times for each process
+                Map<String, Integer> processStartTime = new HashMap<>();
+                Map<String, Integer> processEndTime = new HashMap<>();
+
+                for (String log : processLog) {
+                    try {
+                        String[] parts = log.split(":");
+                        int time = Integer.parseInt(parts[0].split(" ")[1].trim());
+                        String[] eventParts = parts[1].trim().split(" ", 3);
+                        String processName = eventParts[1];
+                        String event = eventParts[2];
+
+                        maxTime = Math.max(maxTime, time);
+
+                        // Assign a unique color to each process
+                        if (!processColors.containsKey(processName)) {
+                            processColors.put(processName, colorIndex++);
+                        }
+
+                        // Set color for the current process
+                        g.setColor(getColorByIndex(processColors.get(processName)));
+
+                        // Draw a bar segment for "is running"
+                        if (event.equals("is running")) {
+                            // Mark the start time for the process
+                            processStartTime.put(processName, time);
+                        } else if (event.equals("is completed")) {
+                            // Mark the end time for the process
+                            processEndTime.put(processName, time);
+
+                            // Draw the bar for the process
+                            int start = processStartTime.get(processName);
+                            int end = processEndTime.get(processName);
+                            int barWidth = (end - start) * 20; // Calculate width based on duration
+
+                            g.setColor(getColorByIndex(processColors.get(processName)));
+                            g.fillRect(startX + (start * 20), currentY, barWidth, barHeight);
+
+                        }
+
+                        previousProcess = processName;
+                        previousTime = time;
+                    } catch (Exception e) {
+                        System.err.println("Error processing log: " + log);
+                    }
+                }
+
+                // Draw time markers
+                g.setColor(Color.BLACK);
+                int totalTime = previousTime + 1; // Adjust for the last recorded time
+                for (int i = 0; i <= totalTime; i++) {
+                    int x = startX + (i * 20);
+                    g.drawLine(x, 0, x, getHeight());
+                    g.drawString(String.valueOf(i), x, 15);
+                }
+
+                // Draw the legend below the timeline
+                int legendStartX = startX + maxTime * 20 + 40;  // X-coordinate for the legend
+                int legendY = 30;  // Start Y-coordinate for the legend
+
+                // Label for the legend
+                g.setColor(Color.BLACK);
+                g.drawString("Process:", legendStartX, legendY-7);
+
+                // Draw each process's color box and label
+                int legendBoxSize = 20;  // Size of the color box in the legend
+                int legendSpacing = 30;  // Vertical spacing between legend items
+                int legendIndex = 0;
+                for (Map.Entry<String, Integer> entry : processColors.entrySet()) {
+                    g.setColor(getColorByIndex(entry.getValue()));
+                    g.fillRect(legendStartX, legendY + (legendIndex * legendSpacing), legendBoxSize, legendBoxSize); // Draw color box
+                    g.setColor(Color.BLACK);  // Set text color to black for labels
+                    g.drawString(entry.getKey(), legendStartX + legendBoxSize + 5, legendY +4 + (legendIndex * legendSpacing) + legendBoxSize / 2); // Draw process name next to the color box
+                    legendIndex++;
+                }
+
+                // Update preferred size dynamically
+                setPreferredSize(new Dimension(maxTime * 20 + startX + 100, currentY + spacing));
+                revalidate();
+
+            }
+
+
+            private Color getColorByIndex(int index) {
+                Color[] colors = {Color.BLUE, Color.RED, Color.GREEN, Color.ORANGE, Color.CYAN, Color.MAGENTA};
+                return colors[index % colors.length];
+            }
+        }
+
+
+        TimelinePanel timelinePanel = new TimelinePanel(timeline);
+        JScrollPane timelineScrollPane = new JScrollPane(timelinePanel);
+        timelineScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_ALWAYS);
+        timelineScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_NEVER);
+        timelineScrollPane.setPreferredSize(new Dimension(800, 200));
+
+
+
+// Process Logs Panel
+        JTextArea logArea = new JTextArea();
+        logArea.setEditable(false);
+        logArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        timeline.forEach(log -> logArea.append(log + "\n"));
+        JScrollPane logScrollPane = new JScrollPane(logArea);
+        logScrollPane.setPreferredSize(new Dimension(800, 150));
+
+// Process Table
+        String[] columnNames = {"Name", "Arrival", "Burst", "Priority", "Waiting", "Turnaround"};
+        String[][] data = new String[processes.size()][6];
+        for (int i = 0; i < processes.size(); i++) {
+            Process p = processes.get(i);
+            data[i] = new String[]{
+                    p.name,
+                    String.valueOf(p.arrivalTime),
+                    String.valueOf(p.burstTime),
+                    String.valueOf(p.priority),
+                    String.valueOf(p.waitingTime),
+                    String.valueOf(p.turnaroundTime)
+            };
+        }
+        JTable processTable = new JTable(data, columnNames);
+        processTable.setRowHeight(30);
+        processTable.setFont(new Font("Arial", Font.PLAIN, 14));
+        JScrollPane tableScrollPane = new JScrollPane(processTable);
+
+// Stats Panel
+        JPanel statsPanel = new JPanel();
+        statsPanel.setLayout(new GridLayout(2, 1, 10, 10));
+        statsPanel.add(new JLabel("Average Waiting Time: " +
+                (processes.stream().mapToInt(p -> p.waitingTime).average().orElse(0)), SwingConstants.CENTER));
+        statsPanel.add(new JLabel("Average Turnaround Time: " +
+                (processes.stream().mapToInt(p -> p.turnaroundTime).average().orElse(0)), SwingConstants.CENTER));
+        statsPanel.setBackground(new Color(240, 240, 240));
+
+// Layout setup
+        JFrame frame = new JFrame("CPU Scheduling Visualization");
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.setSize(800, 600);
+        frame.setLayout(new BorderLayout(10, 10));
+
+// Add components to the frame
+        frame.add(timelineScrollPane, BorderLayout.NORTH); // Add timeline panel
+        frame.add(logScrollPane, BorderLayout.CENTER);
+        frame.add(tableScrollPane, BorderLayout.WEST);
+        frame.add(statsPanel, BorderLayout.SOUTH);
+
+        frame.setVisible(true);
+
+
 
         printSchedulerResults("Non-Preemptive Priority Scheduling", processes);
     }
@@ -143,15 +309,30 @@ class CPUScheduler {
         int currentTime = 0;
         int completed = 0;
         int n = processes.size();
+        int contextSwitchOverhead = 1;
+        List<String> timeline = new ArrayList<>();
+
+        Map<Process, Integer> ageMap = new HashMap<>();
+        for (Process process : processes) {
+            ageMap.put(process, 0);
+        }
 
         while (completed < n) {
             // Select the process with the shortest burst time among arrived processes
             Process shortestJob = null;
+            int shortestEffectiveBurstTime = Integer.MAX_VALUE;
             for (Process process : processes) {
-                if (!process.isCompleted && process.arrivalTime <= currentTime) {
-                    if (shortestJob == null || process.burstTime < shortestJob.burstTime ||
-                            (process.burstTime == shortestJob.burstTime && process.arrivalTime < shortestJob.arrivalTime)) {
+                if (!process.isCompleted && process.arrivalTime <= currentTime ) {
+                    int newAge = ageMap.get(process) + 1;
+                    ageMap.put(process, newAge);
+
+                    int effectiveBurstTime = process.burstTime - newAge;
+
+                    if (effectiveBurstTime < shortestEffectiveBurstTime ||
+                            (effectiveBurstTime == shortestEffectiveBurstTime && process.arrivalTime < shortestJob.arrivalTime)) {
                         shortestJob = process;
+                        shortestEffectiveBurstTime = effectiveBurstTime;
+
                     }
                 }
             }
@@ -161,18 +342,204 @@ class CPUScheduler {
                 currentTime++;
             } else {
                 // Execute the selected process
+                currentTime += contextSwitchOverhead;
+                timeline.add("Time " + currentTime + ": Process " + shortestJob.name + " is running");
                 shortestJob.waitingTime = currentTime - shortestJob.arrivalTime;
                 shortestJob.turnaroundTime = shortestJob.waitingTime + shortestJob.burstTime;
                 currentTime += shortestJob.burstTime;
                 shortestJob.isCompleted = true;
                 completed++;
+                timeline.add("Time " + currentTime + ": Process " + shortestJob.name + " is completed");
             }
         }
+
+        for (String jojo : timeline ) {
+            System.out.println(jojo);
+        }
+
+        class TimelinePanel extends JPanel {
+            private final List<String> processLog;
+
+
+            public TimelinePanel(List<String> processLog) {
+                this.processLog = processLog;
+
+            }
+
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+
+                int barHeight = 20; // Height of each process bar
+                int spacing = 30;   // Spacing between bars
+                int startX = 50;    // Start x-coordinate for drawing bars
+                int currentY = 20;  // Start y-coordinate for the first process
+
+                Map<String, Integer> processColors = new HashMap<>();
+                int colorIndex = 0;
+                int maxTime = 0;
+
+                String previousProcess = null;
+                int previousTime = 0;
+                // Map to track start and end times for each process
+                Map<String, Integer> processStartTime = new HashMap<>();
+                Map<String, Integer> processEndTime = new HashMap<>();
+
+                for (String log : processLog) {
+                    try {
+                        String[] parts = log.split(":");
+                        int time = Integer.parseInt(parts[0].split(" ")[1].trim());
+                        String[] eventParts = parts[1].trim().split(" ", 3);
+                        String processName = eventParts[1];
+                        String event = eventParts[2];
+
+                        maxTime = Math.max(maxTime, time);
+
+                        // Assign a unique color to each process
+                        if (!processColors.containsKey(processName)) {
+                            processColors.put(processName, colorIndex++);
+                        }
+
+                        // Set color for the current process
+                        g.setColor(getColorByIndex(processColors.get(processName)));
+
+                        // Draw a bar segment for "is running"
+                        if (event.equals("is running")) {
+                            // Mark the start time for the process
+                            processStartTime.put(processName, time);
+                        } else if (event.equals("is completed")) {
+                            // Mark the end time for the process
+                            processEndTime.put(processName, time);
+
+                            // Draw the bar for the process
+                            int start = processStartTime.get(processName);
+                            int end = processEndTime.get(processName);
+                            int barWidth = (end - start) * 20; // Calculate width based on duration
+
+                            g.setColor(getColorByIndex(processColors.get(processName)));
+                            g.fillRect(startX + (start * 20), currentY, barWidth, barHeight);
+
+                        }
+
+                        previousProcess = processName;
+                        previousTime = time;
+                    } catch (Exception e) {
+                        System.err.println("Error processing log: " + log);
+                    }
+                }
+
+                // Draw time markers
+                g.setColor(Color.BLACK);
+                int totalTime = previousTime + 1; // Adjust for the last recorded time
+                for (int i = 0; i <= totalTime; i++) {
+                    int x = startX + (i * 20);
+                    g.drawLine(x, 0, x, getHeight());
+                    g.drawString(String.valueOf(i), x, 15);
+                }
+
+                // Draw the legend below the timeline
+                int legendStartX = startX + maxTime * 20 + 40;  // X-coordinate for the legend
+                int legendY = 30;  // Start Y-coordinate for the legend
+
+                // Label for the legend
+                g.setColor(Color.BLACK);
+                g.drawString("Process:", legendStartX, legendY-7);
+
+                // Draw each process's color box and label
+                int legendBoxSize = 20;  // Size of the color box in the legend
+                int legendSpacing = 30;  // Vertical spacing between legend items
+                int legendIndex = 0;
+                for (Map.Entry<String, Integer> entry : processColors.entrySet()) {
+                    g.setColor(getColorByIndex(entry.getValue()));
+                    g.fillRect(legendStartX, legendY + (legendIndex * legendSpacing), legendBoxSize, legendBoxSize); // Draw color box
+                    g.setColor(Color.BLACK);  // Set text color to black for labels
+                    g.drawString(entry.getKey(), legendStartX + legendBoxSize + 5, legendY +4 + (legendIndex * legendSpacing) + legendBoxSize / 2); // Draw process name next to the color box
+                    legendIndex++;
+                }
+
+                // Update preferred size dynamically
+                setPreferredSize(new Dimension(maxTime * 20 + startX + 100, currentY + spacing));
+                revalidate();
+
+            }
+
+
+            private Color getColorByIndex(int index) {
+                Color[] colors = {Color.BLUE, Color.RED, Color.GREEN, Color.ORANGE, Color.CYAN, Color.MAGENTA};
+                return colors[index % colors.length];
+            }
+        }
+
+
+        TimelinePanel timelinePanel = new TimelinePanel(timeline);
+        JScrollPane timelineScrollPane = new JScrollPane(timelinePanel);
+        timelineScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_ALWAYS);
+        timelineScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_NEVER);
+        timelineScrollPane.setPreferredSize(new Dimension(800, 200));
+
+
+
+// Process Logs Panel
+        JTextArea logArea = new JTextArea();
+        logArea.setEditable(false);
+        logArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        timeline.forEach(log -> logArea.append(log + "\n"));
+        JScrollPane logScrollPane = new JScrollPane(logArea);
+        logScrollPane.setPreferredSize(new Dimension(800, 150));
+
+// Process Table
+        String[] columnNames = {"Name", "Arrival", "Burst", "Priority", "Waiting", "Turnaround"};
+        String[][] data = new String[processes.size()][6];
+        for (int i = 0; i < processes.size(); i++) {
+            Process p = processes.get(i);
+            data[i] = new String[]{
+                    p.name,
+                    String.valueOf(p.arrivalTime),
+                    String.valueOf(p.burstTime),
+                    String.valueOf(p.priority),
+                    String.valueOf(p.waitingTime),
+                    String.valueOf(p.turnaroundTime)
+            };
+        }
+        JTable processTable = new JTable(data, columnNames);
+        processTable.setRowHeight(30);
+        processTable.setFont(new Font("Arial", Font.PLAIN, 14));
+        JScrollPane tableScrollPane = new JScrollPane(processTable);
+
+// Stats Panel
+        JPanel statsPanel = new JPanel();
+        statsPanel.setLayout(new GridLayout(2, 1, 10, 10));
+        statsPanel.add(new JLabel("Average Waiting Time: " +
+                (processes.stream().mapToInt(p -> p.waitingTime).average().orElse(0)), SwingConstants.CENTER));
+        statsPanel.add(new JLabel("Average Turnaround Time: " +
+                (processes.stream().mapToInt(p -> p.turnaroundTime).average().orElse(0)), SwingConstants.CENTER));
+        statsPanel.setBackground(new Color(240, 240, 240));
+
+// Layout setup
+        JFrame frame = new JFrame("CPU Scheduling Visualization");
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.setSize(800, 600);
+        frame.setLayout(new BorderLayout(10, 10));
+
+// Add components to the frame
+        frame.add(timelineScrollPane, BorderLayout.NORTH); // Add timeline panel
+        frame.add(logScrollPane, BorderLayout.CENTER);
+        frame.add(tableScrollPane, BorderLayout.WEST);
+        frame.add(statsPanel, BorderLayout.SOUTH);
+
+        frame.setVisible(true);
+
+
+
+
 
         printSchedulerResults("Non-Preemptive Shortest Job First (SJF)", processes);
     }
 
     public static void printSchedulerResults(String schedulerName, List<Process> processes) {
+
+
+
         System.out.println(schedulerName);
         System.out.println("Process\tArrival\tBurst\tWaiting\tTurnaround");
         int totalWaitingTime = 0;
@@ -193,120 +560,244 @@ class CPUScheduler {
 
     // Shortest Remaining Time First (SRTF)
     public static void srtfScheduling(List<Process> processes) {
-        // List<String> timeline = new ArrayList<>();
-        // int currentTime = 0;
-        // int completedProcesses = 0;
-        // int contextSwitchOverhead = 1;
-        // Process lastExecutedProcess = null;
-
-        // while (completedProcesses < processes.size()) {
-        //     Process shortestProcess = null;
-        //     int shortestRemainingTime = Integer.MAX_VALUE;
-
-        //     // Find the process with the shortest remaining burst time among the ready processes
-        //     for (Process p : processes) {
-        //         if (p.arrivalTime <= currentTime && p.remainingBurstTime > 0) {
-        //             if (p.remainingBurstTime < shortestRemainingTime ||
-        //                     (p.remainingBurstTime == shortestRemainingTime && p.arrivalTime < (shortestProcess != null ? shortestProcess.arrivalTime : Integer.MAX_VALUE))) {
-        //                 shortestProcess = p;
-        //                 shortestRemainingTime = p.remainingBurstTime;
-        //             }
-        //         }
-        //     }
-
-        //     if (shortestProcess != null) {
-        //         // Handle context switch if a new process is selected
-        //         if (lastExecutedProcess != shortestProcess) {
-        //             currentTime += contextSwitchOverhead;
-        //             lastExecutedProcess = shortestProcess;
-        //         }
-
-        //         // Execute the selected process for 1 time unit
-        //         shortestProcess.remainingBurstTime--;
-        //         timeline.add("P" + shortestProcess.name + ":" + currentTime); // Track process execution
-        //         currentTime++;
-
-        //         // If the process completes execution
-        //         if (shortestProcess.remainingBurstTime == 0) {
-        //             completedProcesses++;
-        //             shortestProcess.turnaroundTime = currentTime - shortestProcess.arrivalTime;
-        //             shortestProcess.waitingTime = shortestProcess.turnaroundTime - shortestProcess.burstTime;
-        //             shortestProcess.isCompleted = true;
-        //         }
-        //     } else {
-        //         // No process is ready; advance time
-        //         currentTime++;
-        //     }
-        // }
-
-        // printSchedulerResults("Shortest Remaining Time First (SRTF)", processes);
-        // drawGanttChart(timeline);
-
-        PriorityQueue remainingProcesses = new PriorityQueue<>((p1, p2) -> Integer.compare(p1.getBurstTime() - p1.getAge(), p2.getBurstTime() - p2.getAge()));
-        PriorityQueue tmp = new PriorityQueue<>((p1, p2) -> Integer.compare(p1.getBurstTime() - p1.getAge(), p2.getBurstTime() - p2.getAge()));
-        Process currentProcess = new Process(null, null, 0, 0, 0, 0);
-
+        List<String> timeline = new ArrayList<>();
         int currentTime = 0;
-        int i = 0;
-        while(i <= processes.size() || !remainingProcesses.isEmpty() || currentProcess.getName() != null) {
-            while(!remainingProcesses.isEmpty()) {
-                Process newProcess = remainingProcesses.poll();
-                newProcess.incrementAge();
-                tmp.add(newProcess);
+        int completedProcesses = 0;
+        int contextSwitchOverhead = 1;
+        Process lastExecutedProcess = null;
+        Map<Process, Integer> ageMap = new HashMap<>();
+
+        for (Process p : processes) {
+            ageMap.put(p, 0);
+        }
+
+        while (completedProcesses < processes.size()) {
+            Process shortestProcess = null;
+
+            int shortestEffectiveTime = Integer.MAX_VALUE;
+
+
+            for (Process p : processes) {
+                if (p.arrivalTime <= currentTime && p.remainingBurstTime > 0  && shortestProcess != p) {
+                    int newAge = ageMap.get(p) + 1;
+                    ageMap.put(p, newAge);
+                }
             }
-            remainingProcesses = new PriorityQueue<>(tmp);
-            tmp = new PriorityQueue<>((p1, p2) -> Integer.compare(p1.getBurstTime() - p1.getAge(), p2.getBurstTime() - p2.getAge()));
-            while(processes.get(i).getArrivalTime() <= currentTime) {
-                remainingProcesses.add(processes.get(i));
-                i++;
+
+            // Find the process with the shortest remaining burst time among the ready processes
+            for (Process p : processes) {
+                if (p.arrivalTime <= currentTime && p.remainingBurstTime > 0) {
+                    int effectiveTime = p.remainingBurstTime - ageMap.get(p);
+                    if (effectiveTime < shortestEffectiveTime ||
+                            (effectiveTime == shortestEffectiveTime && p.arrivalTime < (shortestProcess != null ? shortestProcess.arrivalTime : Integer.MAX_VALUE))) {
+                        shortestProcess = p;
+                        shortestEffectiveTime = effectiveTime;
+                    }
+                }
+            }
+
+            if (shortestProcess != null) {
+
+                if (lastExecutedProcess != shortestProcess) {
+                    currentTime += contextSwitchOverhead;
+                    lastExecutedProcess = shortestProcess;
+                }
+
+
+                shortestProcess.remainingBurstTime--;
+                timeline.add("Time " + currentTime + ": Process " + shortestProcess.name + " is running");
+                currentTime++;
+
+
+                if (shortestProcess.remainingBurstTime == 0) {
+                    completedProcesses++;
+                    shortestProcess.turnaroundTime = currentTime - shortestProcess.arrivalTime;
+                    shortestProcess.waitingTime = shortestProcess.turnaroundTime - shortestProcess.burstTime;
+                    shortestProcess.isCompleted = true;
+                    ageMap.remove(shortestProcess);
+                }
+            } else {
+
+                currentTime++;
             }
         }
-    }
 
-    public static void drawGanttChart(List<String> timeline) {
-        JFrame frame = new JFrame("CPU Scheduling Graph");
-        frame.setSize(800, 400);
-        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        printSchedulerResults("Shortest Remaining Time First (SRTF)", processes);
 
-        JPanel panel = new JPanel() {
 
+        class TimelinePanel extends JPanel {
+            private final List<String> processLog;
+
+
+            public TimelinePanel(List<String> processLog) {
+                this.processLog = processLog;
+
+            }
+
+            @Override
             protected void paintComponent(Graphics g) {
                 super.paintComponent(g);
 
-                int x = 50; // Starting x position
-                int y = 100; // y position
-                int width = 50; // Width of each block
-                int height = 50; // Height of each block
+                int barHeight = 20; // Height of each process bar
+                int spacing = 30;   // Spacing between bars
+                int startX = 50;    // Start x-coordinate for drawing bars
+                int currentY = 20;  // Start y-coordinate for the first process
 
-                Map<String, Color> processColors = new HashMap<>();
+                Map<String, Integer> processColors = new HashMap<>();
                 int colorIndex = 0;
+                int maxTime = 0;
 
-                for (String event : timeline) {
-                    String[] parts = event.split(":");
-                    String processName = parts[0];
-                    int time = Integer.parseInt(parts[1]);
+                String previousProcess = null;
+                int previousTime = 0;
 
-                    // Assign colors for each process
-                    processColors.putIfAbsent(processName, new Color((int) (Math.random() * 0x1000000)));
+                for (String log : processLog) {
+                    try {
+                        String[] parts = log.split(":");
+                        int time = Integer.parseInt(parts[0].split(" ")[1].trim());
+                        String[] eventParts = parts[1].trim().split(" ", 3);
+                        String processName = eventParts[1];
+                        String event = eventParts[2];
 
-                    // Draw process block
-                    g.setColor(processColors.get(processName));
-                    g.fillRect(x, y, width, height);
-                    g.setColor(Color.BLACK);
-                    g.drawRect(x, y, width, height);
+                        maxTime = Math.max(maxTime, time);
 
-                    // Draw process name and time
-                    g.drawString(processName, x + 10, y + 20);
-                    g.drawString(String.valueOf(time), x + 10, y + height + 15);
+                        // Assign a unique color to each process
+                        if (!processColors.containsKey(processName)) {
+                            processColors.put(processName, colorIndex++);
+                        }
 
-                    x += width; // Move to the next block
+                        // Set color for the current process
+                        g.setColor(getColorByIndex(processColors.get(processName)));
+
+                        // Draw a bar segment for "is running"
+                        if (event.equals("is running")) {
+                            int barWidth = 20; // Fixed width for one unit of time
+                            g.fillRect(startX + (time * barWidth), currentY, barWidth, barHeight);
+                        }
+
+                        // Move down for "is completed" events
+                        if (event.equals("is completed")) {
+                            currentY += barHeight + spacing;
+                        }
+
+                        previousProcess = processName;
+                        previousTime = time;
+                    } catch (Exception e) {
+                        System.err.println("Error processing log: " + log);
+                    }
                 }
-            }
-        };
 
-        frame.add(panel);
+                // Draw time markers
+                g.setColor(Color.BLACK);
+                int totalTime = previousTime + 1; // Adjust for the last recorded time
+                for (int i = 0; i <= totalTime; i++) {
+                    int x = startX + (i * 20);
+                    g.drawLine(x, 0, x, getHeight());
+                    g.drawString(String.valueOf(i), x, 15);
+                }
+
+                // Draw the legend below the timeline
+                int legendStartX = startX + maxTime * 20 + 40;  // X-coordinate for the legend
+                int legendY = 30;  // Start Y-coordinate for the legend
+
+                // Label for the legend
+                g.setColor(Color.BLACK);
+                g.drawString("Process:", legendStartX, legendY-7);
+
+                // Draw each process's color box and label
+                int legendBoxSize = 20;  // Size of the color box in the legend
+                int legendSpacing = 30;  // Vertical spacing between legend items
+                int legendIndex = 0;
+                for (Map.Entry<String, Integer> entry : processColors.entrySet()) {
+                    g.setColor(getColorByIndex(entry.getValue()));
+                    g.fillRect(legendStartX, legendY + (legendIndex * legendSpacing), legendBoxSize, legendBoxSize); // Draw color box
+                    g.setColor(Color.BLACK);  // Set text color to black for labels
+                    g.drawString(entry.getKey(), legendStartX + legendBoxSize + 5, legendY +4 + (legendIndex * legendSpacing) + legendBoxSize / 2); // Draw process name next to the color box
+                    legendIndex++;
+                }
+
+                // Update preferred size dynamically
+                setPreferredSize(new Dimension(maxTime * 20 + startX + 100, currentY + spacing));
+                revalidate();
+
+            }
+
+
+            private Color getColorByIndex(int index) {
+                Color[] colors = {Color.BLUE, Color.RED, Color.GREEN, Color.ORANGE, Color.CYAN, Color.MAGENTA};
+                return colors[index % colors.length];
+            }
+        }
+
+
+        TimelinePanel timelinePanel = new TimelinePanel(timeline);
+        JScrollPane timelineScrollPane = new JScrollPane(timelinePanel);
+        timelineScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_ALWAYS);
+        timelineScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_NEVER);
+        timelineScrollPane.setPreferredSize(new Dimension(800, 200));
+
+
+
+// Process Logs Panel
+        JTextArea logArea = new JTextArea();
+        logArea.setEditable(false);
+        logArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        timeline.forEach(log -> logArea.append(log + "\n"));
+        JScrollPane logScrollPane = new JScrollPane(logArea);
+        logScrollPane.setPreferredSize(new Dimension(800, 150));
+
+// Process Table
+        String[] columnNames = {"Name", "Arrival", "Burst", "Priority", "Waiting", "Turnaround"};
+        String[][] data = new String[processes.size()][6];
+        for (int i = 0; i < processes.size(); i++) {
+            Process p = processes.get(i);
+            data[i] = new String[]{
+                    p.name,
+                    String.valueOf(p.arrivalTime),
+                    String.valueOf(p.burstTime),
+                    String.valueOf(p.priority),
+                    String.valueOf(p.waitingTime),
+                    String.valueOf(p.turnaroundTime)
+            };
+        }
+        JTable processTable = new JTable(data, columnNames);
+        processTable.setRowHeight(30);
+        processTable.setFont(new Font("Arial", Font.PLAIN, 14));
+        JScrollPane tableScrollPane = new JScrollPane(processTable);
+
+// Stats Panel
+        JPanel statsPanel = new JPanel();
+        statsPanel.setLayout(new GridLayout(2, 1, 10, 10));
+        statsPanel.add(new JLabel("Average Waiting Time: " +
+                (processes.stream().mapToInt(p -> p.waitingTime).average().orElse(0)), SwingConstants.CENTER));
+        statsPanel.add(new JLabel("Average Turnaround Time: " +
+                (processes.stream().mapToInt(p -> p.turnaroundTime).average().orElse(0)), SwingConstants.CENTER));
+        statsPanel.setBackground(new Color(240, 240, 240));
+
+// Layout setup
+        JFrame frame = new JFrame("CPU Scheduling Visualization");
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.setSize(800, 600);
+        frame.setLayout(new BorderLayout(10, 10));
+
+// Add components to the frame
+        frame.add(timelineScrollPane, BorderLayout.NORTH); // Add timeline panel
+        frame.add(logScrollPane, BorderLayout.CENTER);
+        frame.add(tableScrollPane, BorderLayout.WEST);
+        frame.add(statsPanel, BorderLayout.SOUTH);
+
         frame.setVisible(true);
+
+
+
+
+
+
+
+
+
     }
+
+
 
 
 
@@ -514,9 +1005,11 @@ class CPUScheduler {
 
         class TimelinePanel extends JPanel {
             private final List<String> processLog;
+            private int jojoTime;
 
             public TimelinePanel(List<String> processLog) {
                 this.processLog = processLog;
+                this.jojoTime = 0;
             }
 
             @Override
@@ -610,7 +1103,9 @@ class CPUScheduler {
                     g.drawString(entry.getKey(), legendStartX + legendBoxSize + 5, legendY +4 + (legendIndex * legendSpacing) + legendBoxSize / 2); // Draw process name next to the color box
                     legendIndex++;
                 }
-
+                // Update preferred size dynamically
+                setPreferredSize(new Dimension(maxTime * 20 + startX + 100, currentY + spacing));
+                revalidate();
 
 
 
@@ -626,7 +1121,12 @@ class CPUScheduler {
 
 // Timeline Panel
         TimelinePanel timelinePanel = new TimelinePanel(processLog);
-        timelinePanel.setPreferredSize(new Dimension(800, 200));
+        JScrollPane timelineScrollPane = new JScrollPane(timelinePanel);
+        timelineScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_ALWAYS);
+        timelineScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
+        timelineScrollPane.setPreferredSize(new Dimension(800, 300));
+
+
 
 // Process Logs Panel
         JTextArea logArea = new JTextArea();
@@ -671,10 +1171,11 @@ class CPUScheduler {
         frame.setLayout(new BorderLayout(10, 10));
 
 // Add components to the frame
-        frame.add(timelinePanel, BorderLayout.NORTH); // Add timeline panel
+        frame.add(timelineScrollPane, BorderLayout.NORTH); // Add timeline panel
         frame.add(logScrollPane, BorderLayout.CENTER);
         frame.add(tableScrollPane, BorderLayout.WEST);
         frame.add(statsPanel, BorderLayout.SOUTH);
+
 
         frame.setVisible(true);
 
@@ -716,52 +1217,125 @@ class CPUScheduler {
 
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
-
-//        System.out.print("Enter number of processes: ");
-//        int numProcesses = scanner.nextInt();
-
         List<Process> processes = new ArrayList<>();
-
-//        for (int i = 0; i < numProcesses; i++) {
-//            System.out.println("Process " + (i + 1) + " details:");
-//            System.out.print("Process Name: ");
-//            String name = scanner.next();
-//
-//            System.out.print("Process Color: ");
-//            String color = scanner.next();
-//
-//            System.out.print("Arrival Time: ");
-//            int arrivalTime = scanner.nextInt();
-//
-//            System.out.print("Burst Time: ");
-//            int burstTime = scanner.nextInt();
-//
-//            System.out.print("Priority: ");
-//            int priority = scanner.nextInt();
-//
-//            System.out.print("Quantum: ");
-//            int quantum = scanner.nextInt();
-//
-//            processes.add(new Process(name, color, arrivalTime, burstTime, priority, quantum));
-//        }
-
-        // Make copies of processes for different scheduling algorithms
+        boolean running = true;
 
 
-        processes.add(new Process("1", "Red", 0, 17, 4, 4));
-        processes.add(new Process("2", "Gold", 3, 6, 9, 3));
-        processes.add(new Process("3", "Yellow", 4, 10, 3, 5));
-        processes.add(new Process("4", "Green", 29, 4, 10, 2));
+        while (running) {
+            System.out.println("=== CPU Scheduling Menu ===");
+            System.out.println("1. Add Process");
+            System.out.println("2. View Processes");
+            System.out.println("3. Priority Scheduling");
+            System.out.println("4. Dynamic FCAI Scheduler");
+            System.out.println("5. SJF Scheduling");
+            System.out.println("6. SRTF Scheduling");
+            System.out.println("7. Exit");
+            System.out.print("Select an option: ");
 
+            int choice = scanner.nextInt();
+            scanner.nextLine(); // Consume newline character
 
+            switch (choice) {
+                case 1:
+                    // Add Process
+                    System.out.print("Process Name: ");
+                    String name = scanner.nextLine();
 
-        dynamicFCAIScheduler(new ArrayList<>(processes));
+                    System.out.print("Arrival Time: ");
+                    int arrivalTime = scanner.nextInt();
 
+                    System.out.print("Burst Time: ");
+                    int burstTime = scanner.nextInt();
 
+                    System.out.print("Priority: ");
+                    int priority = scanner.nextInt();
 
+                    System.out.print("Quantum (Enter 0 if not needed): ");
+                    int quantum = scanner.nextInt();
+
+                    processes.add(new Process(name, name, arrivalTime, burstTime, priority, quantum));
+                    System.out.println("Process added successfully!");
+                    break;
+
+                case 2:
+                    // View Processes
+                    if (processes.isEmpty()) {
+                        System.out.println("No processes available.");
+                    } else {
+                        System.out.println("=== Process List ===");
+                        for (Process p : processes) {
+                            System.out.printf("Name: %s, Color: %s, Arrival: %d, Burst: %d, Priority: %d, Quantum: %d%n",
+                                    p.name, p.color, p.arrivalTime, p.burstTime, p.priority, p.quantum);
+                        }
+                    }
+                    break;
+
+                case 3:
+                    // Priority Scheduling
+                    if (processes.isEmpty()) {
+                        System.out.println("No processes to schedule.");
+                    } else {
+                        priorityScheduling(new ArrayList<>(processes));
+                    }
+                    break;
+
+                case 4:
+                    // Dynamic FCAI Scheduler
+                    if (processes.isEmpty()) {
+                        System.out.println("No processes to schedule.");
+                    } else {
+                        dynamicFCAIScheduler(new ArrayList<>(processes));
+                    }
+                    break;
+
+                case 5:
+                    // SJF Scheduling
+                    if (processes.isEmpty()) {
+                        System.out.println("No processes to schedule.");
+                    } else {
+                        sjfScheduling(new ArrayList<>(processes));
+                    }
+                    break;
+
+                case 6:
+                    // SRTF Scheduling
+                    if (processes.isEmpty()) {
+                        System.out.println("No processes to schedule.");
+                    } else {
+                        srtfScheduling(new ArrayList<>(processes));
+                    }
+                    break;
+
+                case 7:
+                    // Exit
+                    System.out.println("Exiting the program.");
+                    running = false;
+                    break;
+
+                default:
+                    System.out.println("Invalid choice. Please try again.");
+            }
+            System.out.println();
+        }
         scanner.close();
     }
-}
-
-
+ }
+//        processes.add(new Process("1", "Red", 0, 17, 4, 4));
+//        processes.add(new Process("2", "Gold", 3, 6, 9, 3));
+//        processes.add(new Process("3", "Yellow", 4, 10, 3, 5));
+//        processes.add(new Process("4", "Green", 29, 4, 10, 2));
+//
+//
+//
+//        priorityScheduling(new ArrayList<>(processes));
+//        dynamicFCAIScheduler(new ArrayList<>(processes));
+//        sjfScheduling(new ArrayList<>(processes));
+//        srtfScheduling(new ArrayList<>(processes));
+//
+//
+//
+//
+//        scanner.close();
+//    }
+//}
 
