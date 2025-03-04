@@ -42,3 +42,7 @@ A dynamic scheduling algorithm that optimizes execution order based on a composi
 
 ## Graphical User Interface (GUI)
 We developed a GUI to visualize the scheduling results on a timeline. The GUI also displays the **average waiting time** and **average turnaround time** for better analysis of scheduling performance.
+
+Example image for Dynamic FCAI Factor:
+
+<img src="image.png" alt="GUI image" width="800px" />
